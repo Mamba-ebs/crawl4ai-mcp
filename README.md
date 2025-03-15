@@ -1,15 +1,6 @@
 # Web Crawler MCP
 
-[![English](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
-[![中文](https://img.shields.io/badge/lang-zh-blue.svg)](README.zh.md)
-[![हिंदी](https://img.shields.io/badge/lang-hi-blue.svg)](README.hi.md)
-[![Español](https://img.shields.io/badge/lang-es-blue.svg)](README.es.md)
-[![Français](https://img.shields.io/badge/lang-fr-blue.svg)](README.fr.md)
-[![العربية](https://img.shields.io/badge/lang-ar-blue.svg)](README.ar.md)
-[![বাংলা](https://img.shields.io/badge/lang-bn-blue.svg)](README.bn.md)
-[![Русский](https://img.shields.io/badge/lang-ru-blue.svg)](README.ru.md)
-[![Português](https://img.shields.io/badge/lang-pt-blue.svg)](README.pt.md)
-[![Bahasa Indonesia](https://img.shields.io/badge/lang-id-blue.svg)](README.id.md)
+[![English](https://img.shields.io/badge/lang-en-blue.svg)](README.md) [![中文](https://img.shields.io/badge/lang-zh-blue.svg)](lang/README.zh.md) [![हिंदी](https://img.shields.io/badge/lang-hi-blue.svg)](lang/README.hi.md) [![Español](https://img.shields.io/badge/lang-es-blue.svg)](lang/README.es.md) [![Français](https://img.shields.io/badge/lang-fr-blue.svg)](lang/README.fr.md) [![العربية](https://img.shields.io/badge/lang-ar-blue.svg)](lang/README.ar.md) [![বাংলা](https://img.shields.io/badge/lang-bn-blue.svg)](lang/README.bn.md) [![Русский](https://img.shields.io/badge/lang-ru-blue.svg)](lang/README.ru.md) [![Português](https://img.shields.io/badge/lang-pt-blue.svg)](lang/README.pt.md) [![Bahasa Indonesia](https://img.shields.io/badge/lang-id-blue.svg)](lang/README.id.md)
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
