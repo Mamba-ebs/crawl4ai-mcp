@@ -1,5 +1,16 @@
 # Web Crawler MCP
 
+[![English](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
+[![中文](https://img.shields.io/badge/lang-zh-blue.svg)](README.zh.md)
+[![हिंदी](https://img.shields.io/badge/lang-hi-blue.svg)](README.hi.md)
+[![Español](https://img.shields.io/badge/lang-es-blue.svg)](README.es.md)
+[![Français](https://img.shields.io/badge/lang-fr-blue.svg)](README.fr.md)
+[![العربية](https://img.shields.io/badge/lang-ar-blue.svg)](README.ar.md)
+[![বাংলা](https://img.shields.io/badge/lang-bn-blue.svg)](README.bn.md)
+[![Русский](https://img.shields.io/badge/lang-ru-blue.svg)](README.ru.md)
+[![Português](https://img.shields.io/badge/lang-pt-blue.svg)](README.pt.md)
+[![Bahasa Indonesia](https://img.shields.io/badge/lang-id-blue.svg)](README.id.md)
+
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -18,8 +29,7 @@ A powerful web crawling tool that integrates with AI assistants via the MCP (Mac
 
 ### Prerequisites
 
-- Python 3.13 or higher
-- pip (Python package manager)
+- Python 3.9 or higher
 
 ### Installation Steps
 
@@ -138,6 +148,16 @@ The crawl tool accepts the following parameters:
 | include_external | boolean | Include external links | false |
 | verbose | boolean | Enable detailed output | true |
 | output_file | string | Output file path | automatically generated |
+
+## 📊 Result Format
+
+The tool returns a summary with:
+- URL crawled
+- Path to the generated file
+- Duration of the crawl
+- Statistics about processed pages (successful, failed, not found, access forbidden)
+
+Results are saved in the `crawl_results` directory of your project.
 
 ## 🤝 Contribution
 

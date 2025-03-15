@@ -37,3 +37,6 @@ crawl_results/
 # OS
 .DS_Store
 Thumbs.db
+
+# OLD
+.old/

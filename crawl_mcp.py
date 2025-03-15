@@ -1,30 +1,26 @@
+import re
 import io
 import os
-import re
 import sys
 import traceback
-import urllib.parse
 from datetime import datetime
 
 import anyio
 import click
+import urllib.parse
 import mcp.types as types
-from mcp.server.lowlevel import Server
-
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
+from mcp.server.lowlevel import Server
 
-# Configure UTF-8 encoding for all outputs - This code remains useful
-# Particularly on Windows where the default encoding may not be UTF-8
-# and to ensure consistency in handling international characters
-# when crawling multilingual websites
 os.environ["PYTHONIOENCODING"] = "utf-8"
 # Force UTF-8 usage for stdout/stderr
 if sys.stdout.encoding != "utf-8":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 if sys.stderr.encoding != "utf-8":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
 
 # Improved function to sanitize texts with explicit replacement of problematic characters
 def sanitize_text(text):
@@ -56,32 +52,36 @@ def sanitize_text(text):
     if not isinstance(text, str):
         text = str(text)
 
-    # List of explicit replacements for known problematic characters
-    replacements = {
-        "\u2192": "->",  # Right arrow → becomes ->
-        "\u2190": "<-",  # Left arrow ← becomes <-
-        "\u2191": "^",   # Up arrow ↑ becomes ^
-        "\u2193": "v",   # Down arrow ↓ becomes v
-        "\u2022": "*",   # Bullet • becomes *
-        "\u2013": "-",   # En dash – becomes -
-        "\u2014": "--",  # Em dash — becomes --
-        "\u2018": "'",   # Left single quotation mark ' becomes '
-        "\u2019": "'",   # Right single quotation mark ' becomes '
-        "\u201c": '"',   # Left double quotation mark " becomes "
-        "\u201d": '"',   # Right double quotation mark " becomes "
-        "\u2026": "...", # Ellipsis … becomes ...
-        "\u00a0": " ",   # Non-breaking space   becomes normal space
-    }
+    try:
+        # Test if the text can be encoded in the default system encoding
+        text.encode(sys.getdefaultencoding())
+    except UnicodeEncodeError:
+        # If it can't, replace problematic characters
+        # List of explicit replacements for known problematic characters
+        replacements = {
+            "\u2192": "->",  # Right arrow → becomes ->
+            "\u2190": "<-",  # Left arrow ← becomes <-
+            "\u2191": "^",   # Up arrow ↑ becomes ^
+            "\u2193": "v",   # Down arrow ↓ becomes v
+            "\u2022": "*",   # Bullet • becomes *
+            "\u2013": "-",   # En dash – becomes -
+            "\u2014": "--",  # Em dash — becomes --
+            "\u2018": "'",   # Left single quotation mark ' becomes '
+            "\u2019": "'",   # Right single quotation mark ' becomes '
+            "\u201c": '"',   # Left double quotation mark " becomes "
+            "\u201d": '"',   # Right double quotation mark " becomes "
+            "\u2026": "...", # Ellipsis … becomes ...
+            "\u00a0": " ",   # Non-breaking space   becomes normal space
+        }
 
-    # Apply explicit replacements
-    for char, replacement in replacements.items():
-        text = text.replace(char, replacement)
+        # Apply explicit replacements
+        for char, replacement in replacements.items():
+            text = text.replace(char, replacement)
 
-    # Eliminate all other non-ASCII characters that might cause problems
-    text = re.sub(r"[^\x00-\x7F]+", " ", text)
+        # Eliminate all other non-ASCII characters that might cause problems
+        text = re.sub(r"[^\x00-\x7F]+", " ", text)
 
     return text
-
 
 def generate_filename_from_url(url):
     """Generates a valid filename from a URL"""
@@ -109,10 +109,49 @@ def get_results_directory():
 
     return results_dir
 
+def remove_links_from_markdown(markdown_text):
+    """
+    Remove links and images from markdown text while preserving text and code indentation.
+    
+    Args:
+        markdown_text (str): The markdown text to be processed
+        
+    Returns:
+        str: Markdown text with links and images removed
+    """
+    # Identify and protect code blocks
+    code_blocks = []
+    
+    # Function to replace code blocks with placeholders
+    def save_code_block(match):
+        code = match.group(0)
+        code_blocks.append(code)
+        return f"__CODE_BLOCK_{len(code_blocks)-1}__"
+    
+    # Identify code blocks (between ``` and ```) and replace them with placeholders
+    markdown_with_placeholders = re.sub(r'```[\s\S]*?```', save_code_block, markdown_text)
+    
+    # Replace links in [text](url) format with just the text
+    text_without_links = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', markdown_with_placeholders)
+    
+    # Completely remove images in ![text](url) format
+    text_without_images = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', text_without_links)
+    
+    # Remove lines containing only spaces
+    text_without_empty_lines = re.sub(r'\n\s*\n', '\n\n', text_without_images)
+    
+    # Remove blocks of consecutive spaces (but not in code blocks)
+    text_without_extra_spaces = re.sub(r' {2,}', ' ', text_without_empty_lines)
+    
+    # Put the code blocks back in place
+    result = text_without_extra_spaces
+    for i, code_block in enumerate(code_blocks):
+        result = result.replace(f"__CODE_BLOCK_{i}__", code_block)
+    
+    return result
 
-async def crawl_website(
-    url: str,
-    max_depth: int = 2,
+async def crawl_and_output_to_markdown(start_url: str,
+    max_depth: int = 5,
     include_external: bool = False,
     verbose: bool = True,
     output_file: str = None,
@@ -133,16 +172,7 @@ async def crawl_website(
     # Generate a filename if not specified
     if not output_file:
         # Use the project folder instead of the temporary folder
-        output_file = os.path.join(
-            get_results_directory(), generate_filename_from_url(url)
-        )
-
-    if verbose:
-        print(
-            f"Crawling {url} (max depth: {max_depth}, include external: {include_external})",
-            file=sys.stderr,
-        )
-        print(f"Results will be saved to: {output_file}", file=sys.stderr)
+        output_file = os.path.join(get_results_directory(), generate_filename_from_url(start_url))
 
     config = CrawlerRunConfig(
         deep_crawl_strategy=BFSDeepCrawlStrategy(
@@ -153,209 +183,134 @@ async def crawl_website(
         verbose=verbose,
     )
 
-    result_markdown = io.StringIO()
+    try:
+        async with AsyncWebCrawler() as crawler:
+            results = await crawler.arun(start_url, config=config)
+            print(f"Crawled {len(results)} pages in total")
+            
+            # Create the parent folder if necessary
+            os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
+            
+            # Call results_to_markdown and get the result
+            return await results_to_markdown(results, output_file)
+    except Exception as e:
+        print(f"Error during crawling: {e}", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
+        return {
+            "error": f"Crawling error: {str(e)}",
+            "file_path": None,
+            "stats": {
+                "successful_pages": 0,
+                "failed_pages": 0,
+                "not_found_pages": 0,
+                "forbidden_pages": 0,
+                "duration_seconds": 0
+            }
+        }
+
+async def results_to_markdown(results: list, output_path: str) -> dict:
+    """
+    Convert crawl results to a markdown file
+    
+    Args:
+        results: List of crawl results
+        output_path: Output file path
+        
+    Returns:
+        A dictionary containing statistics and operation status
+    """
     stats = {
-        "total_pages": 0,
         "successful_pages": 0,
         "failed_pages": 0,
-        "not_found_pages": 0,  # 404 pages
-        "forbidden_pages": 0,   # New statistic for 403 pages
-        "start_time": datetime.now(),
+        "not_found_pages": 0,
+        "forbidden_pages": 0,
+        "start_time": datetime.now()
     }
-
+    
     try:
-        async with AsyncWebCrawler(verbose=verbose) as crawler:
-            # Add a hook to track progress
-            async def progress_callback(event_type, data):
-                if event_type == "page_visit_start":
-                    stats["total_pages"] += 1
-                    if verbose:
-                        print(
-                            f"[{datetime.now().strftime('%H:%M:%S')}] Visiting: {data['url']} (page {stats['total_pages']})",
-                            file=sys.stderr,
-                        )
-                elif event_type == "page_visit_complete":
-                    if data.get("success", False):
-                        stats["successful_pages"] += 1
+        with open(output_path, "w", encoding="utf-8") as md_file:
+            for result in results:
+                # Safe retrieval of content as in crawl copy.py
+                text_for_output = getattr(result, "markdown", None) or getattr(
+                    result, "text", None
+                )
+
+                if not text_for_output:
+                    print(f"No content found for {result.url} - Skipped")
+                    stats["failed_pages"] += 1
+                    continue
+                    
+                # Check if it's an error page (404 or 403)
+                if ("404 Not Found" in text_for_output or "403 Forbidden" in text_for_output) and "nginx" in text_for_output:
+                    error_type = "404" if "404 Not Found" in text_for_output else "403"
+                    print(f"{error_type} page detected and skipped: {result.url}")
+                    if error_type == "404":
+                        stats["not_found_pages"] += 1
                     else:
-                        stats["failed_pages"] += 1
+                        stats["forbidden_pages"] += 1
+                    continue
 
-                    if verbose:
-                        print(
-                            f"[{datetime.now().strftime('%H:%M:%S')}] Completed: {data['url']} (success: {stats['successful_pages']}, failed: {stats['failed_pages']})",
-                            file=sys.stderr,
-                        )
+                # Remove links from Markdown text
+                text_for_output = remove_links_from_markdown(text_for_output)
 
-            # Add the callback to our configuration
-            config.progress_callback = progress_callback
+                # Structuring metadata
+                metadata = {
+                    "depth": result.metadata.get("depth", "N/A"),
+                    "timestamp": datetime.now().isoformat(),
+                    "title": result.metadata.get("title", "Untitled page"),
+                }
+                
+                # Check if title contains error indicators
+                error_indicators = ["404", "403", "Not Found", "Forbidden"]
+                if any(indicator in metadata["title"] for indicator in error_indicators):
+                    print(f"Page with error title detected and skipped: {result.url}")
+                    if "404" in metadata["title"] or "Not Found" in metadata["title"]:
+                        stats["not_found_pages"] += 1
+                    else:
+                        stats["forbidden_pages"] += 1
+                    continue
 
-            try:
-                if verbose:
-                    print(
-                        f"Starting crawl at {datetime.now().strftime('%H:%M:%S')}",
-                        file=sys.stderr,
-                    )
+                # Formatted writing with literal template
+                md_content = f"""
+# {metadata["title"]}
 
-                results = await crawler.arun(url, config=config)
-
-                if verbose:
-                    print(
-                        f"Crawl completed at {datetime.now().strftime('%H:%M:%S')} - {len(results)} pages processed",
-                        file=sys.stderr,
-                    )
-                    print("Generating markdown file...", file=sys.stderr)
-
-                # Ensure that statistics are consistent with the results
-                # Count the number of pages with content as successful
-                stats["successful_pages"] = 0  # Reset to count correctly
-                stats["not_found_pages"] = 0  # Reset the 404 pages counter
-                stats["forbidden_pages"] = 0  # Initialize the 403 pages counter
-
-                for idx, result in enumerate(results):
-                    try:
-                        # Detect 404 pages
-                        if hasattr(result, "status_code") and result.status_code == 404:
-                            stats["not_found_pages"] += 1
-                            if verbose:
-                                print(
-                                    f"[{datetime.now().strftime('%H:%M:%S')}] Page not found (404): {result.url}",
-                                    file=sys.stderr,
-                                )
-                            continue
-                            
-                        # Detect 403 pages
-                        if hasattr(result, "status_code") and result.status_code == 403:
-                            stats["forbidden_pages"] += 1
-                            if verbose:
-                                print(
-                                    f"[{datetime.now().strftime('%H:%M:%S')}] Access forbidden (403): {result.url}",
-                                    file=sys.stderr,
-                                )
-                            continue
-
-                        text_for_output = getattr(result, "markdown", None) or getattr(
-                            result, "text", None
-                        )
-
-                        # Check if the content looks like a 404 page (contains "404 Not Found")
-                        if text_for_output and "404 Not Found" in text_for_output:
-                            stats["not_found_pages"] += 1
-                            if verbose:
-                                print(
-                                    f"[{datetime.now().strftime('%H:%M:%S')}] Page not found (content 404): {result.url}",
-                                    file=sys.stderr,
-                                )
-                            continue
-                            
-                        # Check if the content looks like a 403 page (contains "403 Forbidden")
-                        if text_for_output and "403 Forbidden" in text_for_output:
-                            stats["forbidden_pages"] += 1
-                            if verbose:
-                                print(
-                                    f"[{datetime.now().strftime('%H:%M:%S')}] Access forbidden (content 403): {result.url}",
-                                    file=sys.stderr,
-                                )
-                            continue
-
-                        if not text_for_output:
-                            continue
-
-                        # Increment the successful pages counter
-                        stats["successful_pages"] += 1
-
-                        # Sanitize all elements that will be written
-                        safe_url = sanitize_text(result.url)
-                        safe_depth = sanitize_text(
-                            str(result.metadata.get("depth", "N/A"))
-                        )
-                        safe_timestamp = sanitize_text(datetime.now().isoformat())
-                        safe_content = sanitize_text(text_for_output)
-
-                        md_content = f"""
-# {safe_url}
+## URL
+{result.url}
 
 ## Metadata
-- Depth: {safe_depth}
-- Timestamp: {safe_timestamp}
+- Depth: {metadata["depth"]}
+- Timestamp: {metadata["timestamp"]}
 
 ## Content
-{safe_content}
+{text_for_output}
 
 ---
 """
-                        result_markdown.write(md_content)
-                    except Exception as e:
-                        print(
-                            f"Error processing result {idx}: {e}",
-                            file=sys.stderr,
-                        )
-                        # Log problematic content for diagnosis
-                        if verbose:
-                            print(
-                                f"Possible problematic characters in: {result.url}",
-                                file=sys.stderr,
-                            )
-            except Exception as e:
-                print(f"Error during crawling execution: {e}", file=sys.stderr)
-                return {
-                    "error": f"Crawling error: {str(e)}",
-                    "file_path": None,
-                    "stats": stats,
-                }
-    except Exception as e:
-        print(f"Error initializing crawler: {e}", file=sys.stderr)
-        return {
-            "error": f"Initialization error: {str(e)}",
-            "file_path": None,
-            "stats": stats,
-        }
-
-    # Write content to the specified file
-    try:
-        content = result_markdown.getvalue()
-
-        if verbose:
-            print(
-                f"Writing results to file: {output_file}",
-                file=sys.stderr,
-            )
-
-        # Create parent directory if needed
-        os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
-
-        # Sanitize and write content
-        with open(output_file, "w", encoding="utf-8", errors="replace") as f:
-            safe_content = sanitize_text(content)
-            f.write(safe_content)
-
-        # Finalize stats
+                md_file.write(md_content)
+                stats["successful_pages"] += 1
+            
+            # Display a summary at the end
+            print(f"Valid pages processed: {stats['successful_pages']}")
+            print(f"Error pages (403/404) skipped: {stats['not_found_pages'] + stats['forbidden_pages']}")
+        
+        # Finalize statistics
         stats["end_time"] = datetime.now()
-        stats["duration_seconds"] = (
-            stats["end_time"] - stats["start_time"]
-        ).total_seconds()
-
-        if verbose:
-            print(
-                f"Crawl completed in {stats['duration_seconds']:.2f} seconds",
-                file=sys.stderr,
-            )
-            print(
-                f"Pages processed: {stats['successful_pages']} successful, {stats['failed_pages']} failed, "
-                f"{stats['not_found_pages']} not found (404), {stats['forbidden_pages']} access forbidden (403)",
-                file=sys.stderr,
-            )
-            print(f"Results saved to: {output_file}", sys.stderr)
-
-        return {"file_path": output_file, "stats": stats, "error": None}
+        stats["duration_seconds"] = (stats["end_time"] - stats["start_time"]).total_seconds()
+        
+        return {
+            "file_path": output_path,
+            "stats": stats,
+            "error": None
+        }
+    
     except Exception as e:
-        print(f"Error writing file: {e}", file=sys.stderr)
+        print(f"Error writing markdown file: {e}", file=sys.stderr)
         print(traceback.format_exc(), file=sys.stderr)
         return {
             "error": f"Writing error: {str(e)}",
             "file_path": None,
-            "stats": stats,
+            "stats": stats
         }
-
 
 @click.command()
 @click.option("--port", default=8000, help="Port to listen on for SSE")
@@ -383,7 +338,7 @@ def main(port: int, transport: str) -> int:
         output_file = arguments.get("output_file", None)
 
         try:
-            result = await crawl_website(
+            result = await crawl_and_output_to_markdown(
                 arguments["url"],
                 max_depth=max_depth,
                 include_external=include_external,
@@ -411,11 +366,10 @@ def main(port: int, transport: str) -> int:
 You can view the results in the file: {file_path}
 (Results are now stored in the 'crawl_results' folder of your project)
             """
-
             return [types.TextContent(type="text", text=summary)]
         except Exception as e:
             print(f"Error in crawl_tool: {e}", file=sys.stderr)
-            print(traceback.format_exc(), sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
             return [
                 types.TextContent(type="text", text=f"Error: {sanitize_text(str(e))}")
             ]
