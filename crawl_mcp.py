@@ -1,9 +1,44 @@
-import re
+import sys
 import io
 import os
-import sys
+import re
 import traceback
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Force UTF-8 usage for stdout/stderr
+if sys.stdout.encoding != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+if sys.stderr.encoding != "utf-8":
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
+# Nuclear Stdout Patch for MCP
+# Keep a reference to the real stdout for the MCP server
+original_stdout = sys.stdout
+# Redirect ANY future print/log to stderr to keep the protocol stream clean
+sys.stdout = sys.stderr
+
 from datetime import datetime
+
+# Setup Logging
+def setup_logging():
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "crawl_mcp.log")
+
+    logger = logging.getLogger("crawl4ai_mcp")
+    logger.setLevel(logging.INFO)
+    
+    # Check if handler already exists to avoid duplicate logs on re-import/reload
+    if not logger.handlers:
+        handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    
+    return logger
+
+logger = setup_logging()
 
 import anyio
 import click
@@ -16,10 +51,7 @@ from mcp.server.lowlevel import Server
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 # Force UTF-8 usage for stdout/stderr
-if sys.stdout.encoding != "utf-8":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-if sys.stderr.encoding != "utf-8":
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
 
 
 # Improved function to sanitize texts with explicit replacement of problematic characters
@@ -109,6 +141,9 @@ def get_results_directory():
 
     return results_dir
 
+
+
+
 def remove_links_from_markdown(markdown_text):
     """
     Remove links and images from markdown text while preserving text and code indentation.
@@ -169,6 +204,7 @@ async def crawl_and_output_to_markdown(start_url: str,
     Returns:
         A dictionary containing the file path and statistics
     """
+    logger.info(f"Starting crawl for URL: {start_url}, Depth: {max_depth}, External: {include_external}")
     # Generate a filename if not specified
     if not output_file:
         # Use the project folder instead of the temporary folder
@@ -186,7 +222,8 @@ async def crawl_and_output_to_markdown(start_url: str,
     try:
         async with AsyncWebCrawler() as crawler:
             results = await crawler.arun(start_url, config=config)
-            print(f"Crawled {len(results)} pages in total")
+            print(f"Crawled {len(results)} pages in total", file=sys.stderr)
+            logger.info(f"Crawl finished. Processed {len(results)} pages.")
             
             # Create the parent folder if necessary
             os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
@@ -194,6 +231,7 @@ async def crawl_and_output_to_markdown(start_url: str,
             # Call results_to_markdown and get the result
             return await results_to_markdown(results, output_file)
     except Exception as e:
+        logger.error(f"Crawl failed: {e}", exc_info=True)
         print(f"Error during crawling: {e}", file=sys.stderr)
         print(traceback.format_exc(), file=sys.stderr)
         return {
@@ -236,14 +274,14 @@ async def results_to_markdown(results: list, output_path: str) -> dict:
                 )
 
                 if not text_for_output:
-                    print(f"No content found for {result.url} - Skipped")
+                    print(f"No content found for {result.url} - Skipped", file=sys.stderr)
                     stats["failed_pages"] += 1
                     continue
                     
                 # Check if it's an error page (404 or 403)
                 if ("404 Not Found" in text_for_output or "403 Forbidden" in text_for_output) and "nginx" in text_for_output:
                     error_type = "404" if "404 Not Found" in text_for_output else "403"
-                    print(f"{error_type} page detected and skipped: {result.url}")
+                    print(f"{error_type} page detected and skipped: {result.url}", file=sys.stderr)
                     if error_type == "404":
                         stats["not_found_pages"] += 1
                     else:
@@ -263,7 +301,7 @@ async def results_to_markdown(results: list, output_path: str) -> dict:
                 # Check if title contains error indicators
                 error_indicators = ["404", "403", "Not Found", "Forbidden"]
                 if any(indicator in metadata["title"] for indicator in error_indicators):
-                    print(f"Page with error title detected and skipped: {result.url}")
+                    print(f"Page with error title detected and skipped: {result.url}", file=sys.stderr)
                     if "404" in metadata["title"] or "Not Found" in metadata["title"]:
                         stats["not_found_pages"] += 1
                     else:
@@ -290,8 +328,8 @@ async def results_to_markdown(results: list, output_path: str) -> dict:
                 stats["successful_pages"] += 1
             
             # Display a summary at the end
-            print(f"Valid pages processed: {stats['successful_pages']}")
-            print(f"Error pages (403/404) skipped: {stats['not_found_pages'] + stats['forbidden_pages']}")
+            print(f"Valid pages processed: {stats['successful_pages']}", file=sys.stderr)
+            print(f"Error pages (403/404) skipped: {stats['not_found_pages'] + stats['forbidden_pages']}", file=sys.stderr)
         
         # Finalize statistics
         stats["end_time"] = datetime.now()
@@ -304,6 +342,7 @@ async def results_to_markdown(results: list, output_path: str) -> dict:
         }
     
     except Exception as e:
+        logger.error(f"Failed to write markdown results: {e}", exc_info=True)
         print(f"Error writing markdown file: {e}", file=sys.stderr)
         print(traceback.format_exc(), file=sys.stderr)
         return {
@@ -327,7 +366,9 @@ def main(port: int, transport: str) -> int:
     async def crawl_tool(
         name: str, arguments: dict
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+        logger.info(f"Tool call received: {name} with args {arguments}")
         if name != "crawl":
+            logger.warning(f"Unknown tool requested: {name}")
             raise ValueError(f"Unknown tool: {name}")
         if "url" not in arguments:
             raise ValueError("Missing required argument 'url'")
@@ -366,8 +407,10 @@ def main(port: int, transport: str) -> int:
 You can view the results in the file: {file_path}
 (Results are now stored in the 'crawl_results' folder of your project)
             """
+            logger.info("Crawl tool execution completed successfully")
             return [types.TextContent(type="text", text=summary)]
         except Exception as e:
+            logger.error(f"Error in crawl_tool: {e}", exc_info=True)
             print(f"Error in crawl_tool: {e}", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
             return [
@@ -443,7 +486,13 @@ You can view the results in the file: {file_path}
         from mcp.server.stdio import stdio_server
 
         async def arun():
-            async with stdio_server() as streams:
+            # Use the preserved original_stdout for the MCP protocol stream
+            # anyio.wrap_file wraps a blocking file object in an async wrapper
+            async_stdout = anyio.wrap_file(original_stdout)
+            
+            logger.info("Starting MCP stdio server")
+
+            async with stdio_server(stdout=async_stdout) as streams:
                 await app.run(
                     streams[0], streams[1], app.create_initialization_options()
                 )

@@ -1,0 +1,13 @@
+2026-02-02 10:33:51,558 - crawl4ai_mcp - INFO - Starting MCP stdio server
+2026-02-02 10:34:45,946 - crawl4ai_mcp - INFO - Tool call received: crawl with args {'output_file': '/home/ebs/docker/MCPs/mailreach_spf_dkim.md', 'url': 'https://help.mailreach.co/en/article/how-to-properly-set-up-spf-and-dkim-records-1hlbcuq/'}
+2026-02-02 10:34:45,946 - crawl4ai_mcp - INFO - Starting crawl for URL: https://help.mailreach.co/en/article/how-to-properly-set-up-spf-and-dkim-records-1hlbcuq/, Depth: 2, External: False
+2026-02-02 10:35:33,803 - crawl4ai_mcp - INFO - Crawl finished. Processed 74 pages.
+2026-02-02 10:35:34,147 - crawl4ai_mcp - INFO - Crawl tool execution completed successfully
+2026-02-02 10:36:06,128 - crawl4ai_mcp - INFO - Tool call received: crawl with args {'max_depth': 0, 'output_file': '/home/ebs/docker/MCPs/mailreach_spf_dkim.md', 'url': 'https://help.mailreach.co/en/article/how-to-properly-set-up-spf-and-dkim-records-1hlbcuq/', 'verbose': True}
+2026-02-02 10:36:06,128 - crawl4ai_mcp - INFO - Starting crawl for URL: https://help.mailreach.co/en/article/how-to-properly-set-up-spf-and-dkim-records-1hlbcuq/, Depth: 0, External: False
+2026-02-02 10:36:09,165 - crawl4ai_mcp - INFO - Crawl finished. Processed 1 pages.
+2026-02-02 10:36:09,275 - crawl4ai_mcp - INFO - Crawl tool execution completed successfully
+2026-02-02 10:44:55,963 - crawl4ai_mcp - INFO - Tool call received: crawl with args {'max_depth': 0, 'output_file': '/home/ebs/docker/MCPs/crawl4ai-mcp/mailreach_spf_dkim.md', 'url': 'https://help.mailreach.co/en/article/how-to-properly-set-up-spf-and-dkim-records-1hlbcuq/', 'verbose': True}
+2026-02-02 10:44:55,964 - crawl4ai_mcp - INFO - Starting crawl for URL: https://help.mailreach.co/en/article/how-to-properly-set-up-spf-and-dkim-records-1hlbcuq/, Depth: 0, External: False
+2026-02-02 10:44:58,210 - crawl4ai_mcp - INFO - Crawl finished. Processed 1 pages.
+2026-02-02 10:44:58,396 - crawl4ai_mcp - INFO - Crawl tool execution completed successfully

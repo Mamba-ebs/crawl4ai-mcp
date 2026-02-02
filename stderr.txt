@@ -1,0 +1,1 @@
+LIBRARY: I am printing to sys.stdout (should be stderr)
