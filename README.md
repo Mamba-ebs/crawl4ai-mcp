@@ -111,6 +111,12 @@ Here are examples of requests you can make to Claude after configuring the MCP t
 - **Crawl with Options**: "Can you crawl https://example.com with a depth of 3 and include external links?"
 - **Crawl with Custom Output**: "Can you crawl the blog example.com and save the results in a file named 'blog_analysis.md'?"
 
+### Verified Examples
+
+- **MailReach Helpdesk**: Successfully crawled SPF/DKIM setup guide.
+  - URL: `https://help.mailreach.co/en/article/how-to-properly-set-up-spf-and-dkim-records-1hlbcuq/`
+
+
 ## 📁 Result Structure
 
 Crawl results are saved in the `crawl_results` folder at the root of the project. Each result file is in Markdown format with the following structure:
